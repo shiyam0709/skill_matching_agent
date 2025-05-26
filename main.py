@@ -1,13 +1,14 @@
 import dotenv
 dotenv.load_dotenv()
 
+from langchain_core import embeddings
 import pandas as pd
 from typing_extensions import TypedDict
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, START
 from langgraph.checkpoint.memory import MemorySaver
+from langchain_community.vectorstores import FAISS
 
 df = pd.read_csv("./MOCK_DATA.csv")
 
@@ -21,16 +22,16 @@ for _, row in df.iterrows():
         )
     )
 
-vector_store = InMemoryVectorStore(GoogleGenerativeAIEmbeddings(model="models/text-embedding-004"))
-vector_store.add_documents(documents)
+embeddings =GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+vector_store = FAISS.from_documents(documents, embeddings)
+retriever = vector_store.as_retriever(search_type="similarity_score_threshold", search_kwargs={"score_threshold": 0.3, "k": 10})
 
 class State(TypedDict):
     query: str
     result: list
 
 def search_query(state: State):
-    query = input("Type your question below:\n")
-    result = vector_store.similarity_search(query)
+    result = retriever.invoke(state["query"])
     response_lines = []
     for doc in result:
         row = doc.metadata
@@ -48,4 +49,9 @@ memory = MemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
 
 config = {"configurable": {"thread_id": "1"}}
-graph.invoke({"query": "", "result": ""}, config)
+while True:
+    user_input = input("Type your question below (or 'exit' to quit):\n")
+    if user_input.lower() == "exit":
+        break
+    state = {"query": user_input, "result": []}
+    graph.invoke(state, config)

@@ -1,0 +1,6 @@
+dotenv
+pandas
+langchain_google_genai
+langchain_core
+langgraph
+faiss-cpu
